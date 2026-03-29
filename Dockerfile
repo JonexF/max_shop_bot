@@ -13,8 +13,9 @@ FROM debian:stable-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y ca-certificates && update-ca-certificates && rm -rf /var/lib/apt/lists/*
+
 COPY --from=builder /app/bot /app/bot
 COPY --from=builder /app/*.png /app/
-COPY --from=builder /app/*.mp4 /app/
 
 CMD ["/app/bot"]
