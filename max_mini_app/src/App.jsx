@@ -1,6 +1,22 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { products } from "./products";
-import { createOrder } from "./api";
+
+const API_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+const categoryMeta = {
+  Свинина: {
+    emoji: "🐖",
+    subtitle: "Сытные мясные консервы",
+  },
+  Говядина: {
+    emoji: "🥩",
+    subtitle: "Классическая тушёнка",
+  },
+  "Вторые блюда": {
+    emoji: "🍲",
+    subtitle: "Готовые блюда на каждый день",
+  },
+};
 
 function App() {
   const categories = ["Свинина", "Говядина", "Вторые блюда"];
@@ -15,10 +31,34 @@ function App() {
     phone: "",
     address: "",
   });
+  const [chatId, setChatId] = useState(0);
+  const [loading, setLoading] = useState(false);
 
-  const filteredProducts = products.filter(
-    (product) => product.category === selectedCategory
-  );
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.WebApp) {
+      try {
+        const data = window.WebApp.initDataUnsafe;
+
+        const id = data?.chat?.id || data?.user?.id || 0;
+        setChatId(id);
+
+        if (data?.user?.first_name) {
+          setForm((prev) => ({
+            ...prev,
+            name: prev.name || data.user.first_name,
+          }));
+        }
+
+        window.WebApp.ready();
+      } catch (e) {
+        console.log("MAX init error:", e);
+      }
+    }
+  }, []);
+
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => product.category === selectedCategory);
+  }, [selectedCategory]);
 
   const cartTotal = cartItems.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
@@ -91,6 +131,24 @@ function App() {
     setCartItems([]);
   };
 
+  const updateCartItemQty = (productId, delta) => {
+    setCartItems((prevItems) =>
+      prevItems
+        .map((item) => {
+          if (item.product.id !== productId) return item;
+          const newQty = item.quantity + delta;
+          return { ...item, quantity: newQty };
+        })
+        .filter((item) => item.quantity > 0)
+    );
+  };
+
+  const removeCartItem = (productId) => {
+    setCartItems((prevItems) =>
+      prevItems.filter((item) => item.product.id !== productId)
+    );
+  };
+
   const handleInputChange = (field, value) => {
     setForm((prev) => ({
       ...prev,
@@ -104,10 +162,9 @@ function App() {
       return;
     }
 
-    let chatId = null;
-
-    if (window.WebApp?.initDataUnsafe?.chat?.id) {
-      chatId = window.WebApp.initDataUnsafe.chat.id;
+    if (cartItems.length === 0) {
+      alert("Корзина пустая");
+      return;
     }
 
     const orderData = {
@@ -115,7 +172,7 @@ function App() {
         name: form.name,
         phone: form.phone,
         address: form.address,
-        chatId,
+        chatId: chatId || 0,
       },
       items: cartItems.map((item) => ({
         productId: item.product.id,
@@ -127,43 +184,71 @@ function App() {
     };
 
     try {
-      const result = await createOrder(orderData);
+      setLoading(true);
 
-      alert(result.message || "Заказ оформлен!");
+      const response = await fetch(`${API_URL}/api/order`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result?.error || "Не удалось отправить заказ");
+      }
+
+      alert(result.message || `Заказ #${result.orderId} оформлен!`);
 
       setCartItems([]);
-      setForm({
-        name: "",
+      setForm((prev) => ({
+        name: prev.name,
         phone: "",
         address: "",
-      });
+      }));
       setCurrentScreen("catalog");
+      setSelectedProduct(null);
+      setQuantity(1);
     } catch (error) {
       console.error(error);
-      alert("Не удалось отправить заказ");
+      alert(error.message || "Не удалось отправить заказ");
+    } finally {
+      setLoading(false);
     }
   };
 
+  const Screen = ({ children, nav = "Главная" }) => (
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[#f8fafc] shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
+        {children}
+        {renderBottomNav(nav)}
+      </div>
+    </div>
+  );
+
   const renderBottomNav = (activeTab = "Главная") => (
-    <nav className="fixed bottom-0 left-1/2 z-30 flex w-full max-w-md -translate-x-1/2 items-center justify-around rounded-t-[28px] border-t border-slate-200 bg-white/95 px-2 py-3 shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur">
+    <nav className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-[430px] -translate-x-1/2 border-t border-slate-200 bg-white px-2 py-3">
       {[
-        ["🏷️", "Скидки"],
-        ["🖤", "Избранное"],
-        ["⬛", "Главная"],
-        ["🛒", "Корзина"],
-        ["👤", "Профиль"],
-      ].map(([icon, label]) => (
+        ["Главная", "🏠"],
+        ["Корзина", "🛒"],
+        ["Оформить", "✅"],
+      ].map(([label, icon]) => (
         <button
           key={label}
           onClick={() => {
             if (label === "Главная") goHome();
             if (label === "Корзина") openCart();
+            if (label === "Оформить" && cartItems.length > 0) openCheckout();
           }}
-          className={`flex min-w-[60px] flex-col items-center gap-1 rounded-2xl px-2 py-1 text-center text-[11px] font-medium transition ${
-            activeTab === label ? "bg-slate-900 text-white" : "text-slate-500"
+          className={`flex flex-1 flex-col items-center justify-center gap-1 rounded-2xl py-2 text-[11px] font-semibold transition ${
+            activeTab === label
+              ? "bg-slate-900 text-white"
+              : "text-slate-500"
           }`}
         >
-          <span className="text-[20px] leading-none">{icon}</span>
+          <span className="text-base">{icon}</span>
           <span>
             {label === "Корзина" && cartTotalQty > 0
               ? `Корзина (${cartTotalQty})`
@@ -174,288 +259,335 @@ function App() {
     </nav>
   );
 
+  const renderFloatingCartButton = () => {
+    if (cartTotalQty === 0 || currentScreen === "cart" || currentScreen === "checkout") {
+      return null;
+    }
+
+    return (
+      <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
+        <button
+          onClick={openCart}
+          className="flex w-full items-center justify-between rounded-2xl bg-emerald-500 px-4 py-4 text-white shadow-lg"
+        >
+          <div className="text-left">
+            <div className="text-xs text-emerald-100">В корзине {cartTotalQty} шт.</div>
+            <div className="text-base font-bold">Перейти к оформлению</div>
+          </div>
+          <div className="text-lg font-bold">{cartTotal} ₽</div>
+        </button>
+      </div>
+    );
+  };
+
   if (currentScreen === "product" && selectedProduct) {
     return (
-      <div className="min-h-screen bg-[#f4f5f7] text-slate-900">
-        <div className="mx-auto min-h-screen max-w-md bg-white shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
-          <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/90 backdrop-blur">
-            <div className="flex items-center gap-3 px-4 py-4">
-              <button
-                onClick={closeProductCard}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm"
-              >
-                ←
-              </button>
+      <Screen nav="Корзина">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="flex items-center gap-3 px-4 py-4">
+            <button
+              onClick={closeProductCard}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg"
+            >
+              ←
+            </button>
 
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  карточка товара
-                </div>
-                <div className="truncate text-lg font-bold text-slate-900">
-                  Провиант Одинцово
-                </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium text-slate-400">Товар</div>
+              <div className="truncate text-base font-bold text-slate-900">
+                Провиант Одинцово
               </div>
             </div>
-          </header>
 
-          <main className="px-4 pb-28 pt-4">
-            <div className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-              <div className="aspect-square bg-slate-100">
-                <img
-                  src={selectedProduct.image}
-                  alt={selectedProduct.title}
-                  className="h-full w-full object-cover"
-                />
+            <button
+              onClick={openCart}
+              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold"
+            >
+              🛒 {cartTotalQty}
+            </button>
+          </div>
+        </header>
+
+        <main className="px-4 pb-32 pt-4">
+          <div className="overflow-hidden rounded-[28px] bg-white shadow-sm">
+            <div className="aspect-square bg-slate-100">
+              <img
+                src={selectedProduct.image}
+                alt={selectedProduct.title}
+                className="h-full w-full object-cover"
+              />
+            </div>
+
+            <div className="p-4">
+              <div className="inline-flex rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                {selectedProduct.category}
               </div>
 
-              <div className="p-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                  {selectedProduct.category}
+              <h1 className="mt-3 text-xl font-bold leading-tight text-slate-900">
+                {selectedProduct.title}
+              </h1>
+
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                {selectedProduct.description}
+              </p>
+
+              <div className="mt-4 rounded-2xl bg-slate-50 p-4">
+                <div className="text-xs text-slate-400">Цена за 1 шт.</div>
+                <div className="mt-1 text-2xl font-bold text-slate-900">
+                  {selectedProduct.price} ₽
+                </div>
+              </div>
+
+              <div className="mt-5">
+                <div className="mb-2 text-sm font-semibold text-slate-700">
+                  Количество
                 </div>
 
-                <h1 className="mt-2 text-2xl font-bold leading-tight text-slate-900">
-                  {selectedProduct.title}
-                </h1>
-
-                <p className="mt-3 text-sm leading-6 text-slate-600">
-                  {selectedProduct.description}
-                </p>
-
-                <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                    Цена за 1 шт.
-                  </div>
-                  <div className="mt-1 text-2xl font-bold text-slate-900">
-                    {selectedProduct.price} ₽
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <div className="mb-2 text-sm font-semibold text-slate-700">
-                    Количество
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={decreaseQty}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl shadow-sm"
-                    >
-                      −
-                    </button>
-
-                    <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-lg font-bold">
-                      {quantity}
-                    </div>
-
-                    <button
-                      onClick={increaseQty}
-                      className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl shadow-sm"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={() => setQuantity(10)}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm"
+                    onClick={decreaseQty}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl"
                   >
-                    10 шт
+                    −
                   </button>
 
-                  <button
-                    onClick={() => setQuantity(36)}
-                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 shadow-sm"
-                  >
-                    36 шт
-                  </button>
-                </div>
-
-                <div className="mt-6 rounded-[24px] bg-slate-900 p-4 text-white">
-                  <div className="text-sm text-slate-300">Сумма</div>
-                  <div className="mt-1 text-3xl font-bold">
-                    {selectedProduct.price * quantity} ₽
+                  <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-lg font-bold">
+                    {quantity}
                   </div>
 
                   <button
-                    onClick={addToCart}
-                    className="mt-4 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white shadow-sm"
+                    onClick={increaseQty}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl"
                   >
-                    Добавить в корзину
+                    +
                   </button>
                 </div>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setQuantity(10)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                >
+                  10 шт
+                </button>
+                <button
+                  onClick={() => setQuantity(36)}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+                >
+                  36 шт
+                </button>
               </div>
             </div>
-          </main>
+          </div>
+        </main>
 
-          {renderBottomNav("Корзина")}
+        <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
+          <div className="rounded-[24px] bg-slate-900 p-4 text-white shadow-lg">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm text-slate-300">Сумма</div>
+                <div className="text-3xl font-bold">
+                  {selectedProduct.price * quantity} ₽
+                </div>
+              </div>
+              <div className="rounded-2xl bg-white/10 px-3 py-2 text-sm font-semibold">
+                {quantity} шт
+              </div>
+            </div>
+
+            <button
+              onClick={addToCart}
+              className="mt-4 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
+            >
+              Добавить в корзину
+            </button>
+          </div>
         </div>
-      </div>
+      </Screen>
     );
   }
 
   if (currentScreen === "checkout") {
     return (
-      <div className="min-h-screen bg-[#f4f5f7] text-slate-900">
-        <div className="mx-auto min-h-screen max-w-md bg-white shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
-          <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/90 backdrop-blur">
-            <div className="flex items-center gap-3 px-4 py-4">
-              <button
-                onClick={openCart}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm"
-              >
-                ←
-              </button>
+      <Screen nav="Оформить">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="flex items-center gap-3 px-4 py-4">
+            <button
+              onClick={openCart}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg"
+            >
+              ←
+            </button>
 
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  оформление заказа
-                </div>
-                <div className="truncate text-lg font-bold text-slate-900">
-                  Провиант Одинцово
-                </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium text-slate-400">Оформление</div>
+              <div className="truncate text-base font-bold text-slate-900">
+                Провиант Одинцово
               </div>
             </div>
-          </header>
+          </div>
+        </header>
 
-          <main className="space-y-4 px-4 pb-28 pt-4">
-            <div>
-              <div className="text-sm text-slate-400">Последний шаг</div>
-              <h1 className="text-2xl font-bold text-slate-900">
-                Оформление заказа
-              </h1>
+        <main className="space-y-4 px-4 pb-32 pt-4">
+          <section className="rounded-[28px] bg-slate-900 p-5 text-white">
+            <div className="text-xs uppercase tracking-[0.18em] text-slate-300">
+              Последний шаг
             </div>
+            <h1 className="mt-2 text-2xl font-bold">Оформление заказа</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-300">
+              Оставьте данные для доставки, и мы передадим заказ в обработку.
+            </p>
+          </section>
 
+          <section className="rounded-[28px] bg-white p-4 shadow-sm">
             <div className="space-y-4">
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label className="mb-2 block text-sm font-medium text-slate-700">
                   Имя
                 </label>
                 <input
                   value={form.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-emerald-500"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-emerald-500 focus:bg-white"
                   placeholder="Введите имя"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label className="mb-2 block text-sm font-medium text-slate-700">
                   Телефон
                 </label>
                 <input
                   value={form.phone}
                   onChange={(e) => handleInputChange("phone", e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-emerald-500"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-emerald-500 focus:bg-white"
                   placeholder="+7..."
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-medium text-slate-700">
+                <label className="mb-2 block text-sm font-medium text-slate-700">
                   Адрес
                 </label>
                 <input
                   value={form.address}
                   onChange={(e) => handleInputChange("address", e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 outline-none transition focus:border-emerald-500"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-emerald-500 focus:bg-white"
                   placeholder="Адрес доставки"
                 />
               </div>
             </div>
+          </section>
 
-            <div className="rounded-[24px] bg-slate-100 p-4">
-              <div className="text-sm text-slate-500">Ваш заказ</div>
-              <div className="mt-2 flex items-center justify-between text-sm">
+          <section className="rounded-[28px] bg-white p-4 shadow-sm">
+            <div className="mb-3 text-sm font-semibold text-slate-500">
+              Ваш заказ
+            </div>
+
+            <div className="space-y-3">
+              {cartItems.map((item) => (
+                <div
+                  key={item.product.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-slate-900">
+                      {item.product.title}
+                    </div>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {item.quantity} шт × {item.product.price} ₽
+                    </div>
+                  </div>
+                  <div className="text-sm font-bold text-slate-900">
+                    {item.quantity * item.product.price} ₽
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-4 rounded-[24px] bg-slate-900 p-4 text-white">
+              <div className="flex items-center justify-between text-sm text-slate-300">
                 <span>Товаров</span>
                 <span>{cartTotalQty}</span>
               </div>
-              <div className="mt-2 flex items-center justify-between text-lg font-bold text-slate-900">
-                <span>Итого</span>
-                <span>{cartTotal} ₽</span>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-lg font-medium">Итого</span>
+                <span className="text-3xl font-bold">{cartTotal} ₽</span>
               </div>
             </div>
+          </section>
 
-            <button
-              onClick={submitOrder}
-              className="w-full rounded-2xl bg-slate-900 px-4 py-4 text-base font-bold text-white shadow-sm"
-            >
-              Подтвердить заказ
-            </button>
-          </main>
-
-          {renderBottomNav("Корзина")}
-        </div>
-      </div>
+          <button
+            onClick={submitOrder}
+            disabled={loading}
+            className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white disabled:opacity-60"
+          >
+            {loading ? "Отправка..." : "Подтвердить заказ"}
+          </button>
+        </main>
+      </Screen>
     );
   }
 
   if (currentScreen === "cart") {
     return (
-      <div className="min-h-screen bg-[#f4f5f7] text-slate-900">
-        <div className="mx-auto min-h-screen max-w-md bg-white shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
-          <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/90 backdrop-blur">
-            <div className="flex items-center gap-3 px-4 py-4">
+      <Screen nav="Корзина">
+        <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="flex items-center gap-3 px-4 py-4">
+            <button
+              onClick={goHome}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg"
+            >
+              ←
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-medium text-slate-400">Корзина</div>
+              <div className="truncate text-base font-bold text-slate-900">
+                Провиант Одинцово
+              </div>
+            </div>
+
+            {cartItems.length > 0 && (
+              <button
+                onClick={clearCart}
+                className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600"
+              >
+                Очистить
+              </button>
+            )}
+          </div>
+        </header>
+
+        <main className="px-4 pb-32 pt-4">
+          {cartItems.length === 0 ? (
+            <div className="rounded-[28px] bg-white p-6 text-center shadow-sm">
+              <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-slate-100 text-4xl">
+                🛒
+              </div>
+              <div className="mt-4 text-xl font-bold text-slate-900">
+                Корзина пуста
+              </div>
+              <p className="mt-2 text-sm leading-6 text-slate-500">
+                Добавьте товары из каталога, и они появятся здесь.
+              </p>
+
               <button
                 onClick={goHome}
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm"
+                className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
               >
-                ←
+                Перейти в каталог
               </button>
-
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  корзина
-                </div>
-                <div className="truncate text-lg font-bold text-slate-900">
-                  Провиант Одинцово
-                </div>
-              </div>
             </div>
-          </header>
-
-          <main className="px-4 pb-32 pt-4">
-            <div className="mb-4 flex items-center justify-between">
-              <div>
-                <div className="text-sm text-slate-400">Ваш заказ</div>
-                <h1 className="text-2xl font-bold text-slate-900">Корзина</h1>
-              </div>
-
-              {cartItems.length > 0 && (
-                <button
-                  onClick={clearCart}
-                  className="rounded-2xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-600"
+          ) : (
+            <div className="space-y-4">
+              {cartItems.map((item) => (
+                <div
+                  key={item.product.id}
+                  className="rounded-[28px] bg-white p-3 shadow-sm"
                 >
-                  Очистить
-                </button>
-              )}
-            </div>
-
-            {cartItems.length === 0 ? (
-              <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-6 text-center">
-                <div className="text-4xl">🛒</div>
-                <div className="mt-3 text-lg font-semibold text-slate-900">
-                  Корзина пустая
-                </div>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Добавьте товары из каталога, и они появятся здесь.
-                </p>
-
-                <button
-                  onClick={goHome}
-                  className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
-                >
-                  Перейти в каталог
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {cartItems.map((item) => (
-                  <div
-                    key={item.product.id}
-                    className="flex gap-3 rounded-[24px] border border-slate-200 bg-white p-3 shadow-sm"
-                  >
+                  <div className="flex gap-3">
                     <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl bg-slate-100">
                       <img
                         src={item.product.image}
@@ -470,200 +602,201 @@ function App() {
                       </div>
 
                       <div className="mt-2 text-sm text-slate-500">
-                        {item.quantity} шт × {item.product.price} ₽
+                        {item.product.price} ₽ за 1 шт
                       </div>
 
-                      <div className="mt-3 text-lg font-bold text-slate-900">
-                        {item.quantity * item.product.price} ₽
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => updateCartItemQty(item.product.id, -1)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold"
+                          >
+                            −
+                          </button>
+                          <div className="min-w-[36px] text-center text-sm font-bold">
+                            {item.quantity}
+                          </div>
+                          <button
+                            onClick={() => updateCartItemQty(item.product.id, 1)}
+                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        <div className="text-lg font-bold text-slate-900">
+                          {item.quantity * item.product.price} ₽
+                        </div>
                       </div>
                     </div>
                   </div>
-                ))}
-
-                <div className="mt-4 rounded-[24px] bg-slate-900 p-5 text-white">
-                  <div className="flex items-center justify-between text-sm text-slate-300">
-                    <span>Всего товаров</span>
-                    <span>{cartTotalQty}</span>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-between">
-                    <span className="text-lg font-medium">Итого</span>
-                    <span className="text-3xl font-bold">{cartTotal} ₽</span>
-                  </div>
 
                   <button
-                    onClick={openCheckout}
-                    className="mt-5 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white shadow-sm"
+                    onClick={() => removeCartItem(item.product.id)}
+                    className="mt-3 w-full rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600"
                   >
-                    Оформить заказ
+                    Удалить товар
                   </button>
                 </div>
-              </div>
-            )}
-          </main>
+              ))}
 
-          {renderBottomNav("Корзина")}
-        </div>
-      </div>
+              <div className="rounded-[28px] bg-slate-900 p-5 text-white">
+                <div className="flex items-center justify-between text-sm text-slate-300">
+                  <span>Всего товаров</span>
+                  <span>{cartTotalQty}</span>
+                </div>
+
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-lg font-medium">Итого</span>
+                  <span className="text-3xl font-bold">{cartTotal} ₽</span>
+                </div>
+
+                <button
+                  onClick={openCheckout}
+                  className="mt-5 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
+                >
+                  Оформить заказ
+                </button>
+              </div>
+            </div>
+          )}
+        </main>
+      </Screen>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f5f7] text-slate-900">
-      <div className="mx-auto min-h-screen max-w-md bg-white shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
-        <header className="sticky top-0 z-20 border-b border-slate-100 bg-white/90 backdrop-blur">
-          <div className="px-4 pb-4 pt-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-100 to-lime-50 text-xl shadow-sm">
-                🥫
-              </div>
+  <Screen nav="Главная">
+    {/* HEADER */}
+    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+      <div className="flex items-center gap-3 px-4 py-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl">
+          🥫
+        </div>
 
-              <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
-                <div className="truncate text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-400">
-                  мини-приложение
-                </div>
-                <div className="truncate text-lg font-bold text-slate-900">
-                  Провиант Одинцово
-                </div>
-              </div>
-
-              <button className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-xl shadow-sm transition active:scale-95">
-                🔍
-              </button>
-            </div>
+        <div className="flex-1">
+          <div className="text-xs text-slate-400">Доставка продуктов</div>
+          <div className="text-lg font-bold text-slate-900">
+            Провиант Одинцово
           </div>
-        </header>
+        </div>
 
-        <main className="px-4 pb-28 pt-4">
-          <section className="mb-4 rounded-[24px] bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-900 p-5 text-white shadow-lg">
-            <div className="text-xs font-medium uppercase tracking-[0.22em] text-emerald-200/90">
-              Натуральные консервы
-            </div>
-            <h1 className="mt-2 text-2xl font-bold leading-tight">
-              Выберите категорию и соберите заказ за минуту
-            </h1>
-            <p className="mt-2 text-sm leading-6 text-slate-200">
-              Тушёнка и готовые блюда с аккуратной витриной, как в современном
-              магазине.
-            </p>
-          </section>
-
-          <section>
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Категории
-              </h2>
-              <span className="text-sm text-slate-400">3 раздела</span>
-            </div>
-
-            <div className="grid gap-3">
-              {categories.map((category) => {
-                const isActive = selectedCategory === category;
-
-                return (
-                  <button
-                    key={category}
-                    onClick={() => setSelectedCategory(category)}
-                    className={`w-full rounded-[20px] border px-4 py-4 text-left transition active:scale-[0.99] ${
-                      isActive
-                        ? "border-emerald-500 bg-emerald-50 shadow-[0_8px_24px_rgba(16,185,129,0.14)]"
-                        : "border-slate-200 bg-white shadow-sm"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-                          категория
-                        </div>
-                        <div
-                          className={`mt-1 text-lg font-semibold ${
-                            isActive ? "text-emerald-700" : "text-slate-900"
-                          }`}
-                        >
-                          {category}
-                        </div>
-                      </div>
-
-                      <div
-                        className={`rounded-2xl px-3 py-2 text-xs font-semibold ${
-                          isActive
-                            ? "bg-emerald-600 text-white"
-                            : "bg-slate-100 text-slate-500"
-                        }`}
-                      >
-                        открыть
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="mt-6">
-            <div className="mb-3 flex items-center justify-between">
-              <div>
-                <div className="text-sm text-slate-400">Сейчас выбрано</div>
-                <h3 className="text-xl font-bold text-slate-900">
-                  {selectedCategory}
-                </h3>
-              </div>
-              <div className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-600">
-                {filteredProducts.length} шт.
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {filteredProducts.map((product) => (
-                <article
-                  key={product.id}
-                  onClick={() => openProductCard(product)}
-                  className="cursor-pointer overflow-hidden rounded-[22px] border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-                >
-                  <div className="aspect-square bg-slate-100">
-                    <img
-                      src={product.image}
-                      alt={product.title}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-
-                  <div className="p-3">
-                    <div className="min-h-[60px] text-sm font-medium leading-5 text-slate-800">
-                      {product.title}
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <div>
-                        <div className="text-[11px] uppercase tracking-[0.18em] text-slate-400">
-                          Цена
-                        </div>
-                        <div className="text-lg font-bold text-slate-900">
-                          {product.price} ₽
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          openProductCard(product);
-                        }}
-                        className="rounded-2xl bg-slate-900 px-3 py-2 text-sm font-semibold text-white shadow-sm transition active:scale-95"
-                      >
-                        Открыть
-                      </button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
-          </section>
-        </main>
-
-        {renderBottomNav("Главная")}
+        <button
+          onClick={openCart}
+          className="relative rounded-2xl bg-slate-900 px-3 py-2 text-white"
+        >
+          🛒
+          {cartTotalQty > 0 && (
+            <span className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-2 text-xs text-white">
+              {cartTotalQty}
+            </span>
+          )}
+        </button>
       </div>
-    </div>
-  );
+    </header>
+
+    {/* CONTENT */}
+    <main className="px-4 pb-32 pt-4 space-y-6">
+
+      {/* HERO */}
+      <section className="rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-lg">
+        <h1 className="text-2xl font-bold">
+          Натуральные консервы
+        </h1>
+        <p className="mt-2 text-sm text-emerald-100">
+          Без добавок. ГОСТ. Доставка за 1 день.
+        </p>
+
+        <button
+          onClick={() => setSelectedCategory("Говядина")}
+          className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-bold text-emerald-700"
+        >
+          Смотреть каталог
+        </button>
+      </section>
+
+      {/* CATEGORIES */}
+      <section>
+        <h2 className="mb-3 text-lg font-bold text-slate-900">
+          Категории
+        </h2>
+
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {categories.map((category) => {
+            const isActive = selectedCategory === category;
+
+            return (
+              <button
+                key={category}
+                onClick={() => setSelectedCategory(category)}
+                className={`min-w-[140px] rounded-2xl p-3 text-left transition ${
+                  isActive
+                    ? "bg-emerald-500 text-white"
+                    : "bg-white border border-slate-200"
+                }`}
+              >
+                <div className="text-lg font-semibold">{category}</div>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* PRODUCTS */}
+      <section>
+        <div className="mb-3 flex justify-between items-center">
+          <h2 className="text-lg font-bold text-slate-900">
+            {selectedCategory}
+          </h2>
+          <span className="text-sm text-slate-400">
+            {filteredProducts.length} шт.
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          {filteredProducts.map((product) => (
+            <div
+              key={product.id}
+              onClick={() => openProductCard(product)}
+              className="cursor-pointer rounded-2xl bg-white shadow-sm hover:shadow-md transition"
+            >
+              <div className="aspect-square bg-slate-100 rounded-t-2xl overflow-hidden">
+                <img
+                  src={product.image}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+
+              <div className="p-3">
+                <div className="text-sm font-semibold text-slate-900 line-clamp-2">
+                  {product.title}
+                </div>
+
+                <div className="mt-2 flex justify-between items-center">
+                  <div className="font-bold text-slate-900">
+                    {product.price} ₽
+                  </div>
+
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openProductCard(product);
+                    }}
+                    className="rounded-lg bg-emerald-500 px-2 py-1 text-white"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+    </main>
+
+    {renderFloatingCartButton()}
+  </Screen>
+);
 }
 
 export default App;

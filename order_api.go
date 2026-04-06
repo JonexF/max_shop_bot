@@ -11,9 +11,10 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/max-messenger/max-bot-api-client-go/schemes"
+
 	"github.com/joho/godotenv"
 	maxbot "github.com/max-messenger/max-bot-api-client-go"
+	"github.com/max-messenger/max-bot-api-client-go/schemes"
 )
 
 var adminIDs = []int64{
@@ -21,7 +22,10 @@ var adminIDs = []int64{
 	219284348,
 }
 
-var botApi *maxbot.Api
+var (
+	botApi       *maxbot.Api
+	storefrontURL string
+)
 
 type Customer struct {
 	Name    string `json:"name"`
@@ -48,6 +52,10 @@ type CreateOrderResponse struct {
 	OrderID int    `json:"orderId"`
 }
 
+type ErrorResponse struct {
+	Error string `json:"error"`
+}
+
 type StoredOrder struct {
 	ID       int
 	Customer Customer
@@ -57,15 +65,143 @@ type StoredOrder struct {
 }
 
 var (
-	orderMutex   sync.Mutex
-	orders       = make(map[int]*StoredOrder)
-	nextOrderID  = 1
+	orderMutex  sync.Mutex
+	orders      = make(map[int]*StoredOrder)
+	nextOrderID = 1
 )
 
-func enableCORS(w http.ResponseWriter) {
-	w.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173")
-	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+func isAdmin(chatID int64) bool {
+	for _, adminID := range adminIDs {
+		if adminID == chatID {
+			return true
+		}
+	}
+	return false
+}
+
+func enableCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+
+	allowedOrigins := map[string]bool{
+		"https://dimensional-textile-greatest-von.trycloudflare.com": true,
+		"http://localhost:5173":                                true,
+		"https://max-shop-p1lm6mt33-jonexfs-projects.vercel.app": true,
+	}
+
+	if allowedOrigins[origin] {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+
+	w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+}
+
+func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(statusCode)
+
+	if err := json.NewEncoder(w).Encode(payload); err != nil {
+		log.Println("Ошибка записи JSON ответа:", err)
+	}
+}
+
+func mainKeyboard() *maxbot.Keyboard {
+	kb := &maxbot.Keyboard{}
+	kb.AddRow().AddMessage("Витрина")
+	kb.AddRow().AddMessage("Каталог").AddMessage("Корзина")
+	return kb
+}
+
+func adminKeyboard(orderID int) *maxbot.Keyboard {
+	kb := &maxbot.Keyboard{}
+	kb.AddRow().
+		AddMessage(fmt.Sprintf("Принять заказ %d", orderID)).
+		AddMessage(fmt.Sprintf("В доставке %d", orderID))
+	kb.AddRow().
+		AddMessage(fmt.Sprintf("Доставлен %d", orderID))
+	return kb
+}
+
+func sendText(chatID int64, text string, kb *maxbot.Keyboard) {
+	if botApi == nil {
+		log.Println("Бот не инициализирован")
+		return
+	}
+
+	ctx := context.Background()
+
+	msg := maxbot.NewMessage().
+		SetChat(chatID).
+		SetText(text)
+
+	if kb != nil {
+		msg = msg.AddKeyboard(kb)
+	}
+
+	err := botApi.Messages.Send(ctx, msg)
+	if err != nil {
+		log.Printf("Ошибка отправки в MAX для chatID %d: %v\n", chatID, err)
+		return
+	}
+
+	log.Printf("Успешно отправлено в MAX, chatID: %d\n", chatID)
+}
+
+func sendWelcome(chatID int64) {
+	text := fmt.Sprintf(
+		"👋 Добро пожаловать в Провиант Одинцово!\n\n"+
+			"Открыть витрину:\n%s\n\n"+
+			"Также можно написать:\n"+
+			"• Витрина\n"+
+			"• Каталог\n"+
+			"• Корзина\n"+
+			"• /id",
+		storefrontURL,
+	)
+
+	sendText(chatID, text, mainKeyboard())
+}
+
+func sendStorefront(chatID int64) {
+	text := fmt.Sprintf("🛒 Витрина магазина:\n%s", storefrontURL)
+	sendText(chatID, text, mainKeyboard())
+}
+
+func sendCatalogHint(chatID int64) {
+	text := fmt.Sprintf("📦 Каталог доступен в витрине магазина:\n%s", storefrontURL)
+	sendText(chatID, text, mainKeyboard())
+}
+
+func sendCartHint(chatID int64) {
+	text := fmt.Sprintf("🛒 Корзина доступна внутри витрины магазина:\n%s", storefrontURL)
+	sendText(chatID, text, mainKeyboard())
+}
+
+func handleUserCommand(text string, chatID int64) bool {
+	switch strings.TrimSpace(text) {
+	case "/start", "Старт", "Начать":
+		sendWelcome(chatID)
+		return true
+
+	case "/id", "id", "ID":
+		sendText(chatID, fmt.Sprintf("Ваш ChatID: %d", chatID), mainKeyboard())
+		return true
+
+	case "Витрина":
+		sendStorefront(chatID)
+		return true
+
+	case "Каталог":
+		sendCatalogHint(chatID)
+		return true
+
+	case "Корзина":
+		sendCartHint(chatID)
+		return true
+
+	default:
+		return false
+	}
 }
 
 func createOrderText(order *StoredOrder) string {
@@ -92,40 +228,6 @@ func createOrderText(order *StoredOrder) string {
 	return b.String()
 }
 
-func adminKeyboard(orderID int) *maxbot.Keyboard {
-	kb := &maxbot.Keyboard{}
-	kb.AddRow().
-		AddMessage(fmt.Sprintf("Принять заказ %d", orderID)).
-		AddMessage(fmt.Sprintf("В доставке %d", orderID))
-	kb.AddRow().
-		AddMessage(fmt.Sprintf("Доставлен %d", orderID))
-	return kb
-}
-
-func sendText(chatID int64, text string, kb *maxbot.Keyboard) {
-	if botApi == nil {
-		fmt.Println("Бот не инициализирован")
-		return
-	}
-
-	ctx := context.Background()
-
-	msg := maxbot.NewMessage().
-		SetChat(chatID).
-		SetText(text)
-
-	if kb != nil {
-		msg = msg.AddKeyboard(kb)
-	}
-
-	err := botApi.Messages.Send(ctx, msg)
-	if err != nil {
-		fmt.Println("Ошибка отправки в MAX:", err)
-	} else {
-		fmt.Println("Успешно отправлено в MAX, chatID:", chatID)
-	}
-}
-
 func sendOrderToAdmins(order *StoredOrder) {
 	text := createOrderText(order)
 
@@ -136,16 +238,11 @@ func sendOrderToAdmins(order *StoredOrder) {
 
 func sendStatusToClient(order *StoredOrder) {
 	if order.Customer.ChatID == 0 {
-		fmt.Println("У клиента нет chatId, статус не отправлен")
+		log.Println("У клиента нет chatId, статус не отправлен")
 		return
 	}
 
-	text := fmt.Sprintf(
-		"📦 Статус заказа #%d обновлён: %s",
-		order.ID,
-		order.Status,
-	)
-
+	text := fmt.Sprintf("📦 Статус заказа #%d обновлён: %s", order.ID, order.Status)
 	sendText(order.Customer.ChatID, text, nil)
 }
 
@@ -167,63 +264,103 @@ func parseAdminCommand(text, prefix string) (int, bool) {
 	return orderID, true
 }
 
-func handleAdminStatusCommand(text string) bool {
+func updateOrderStatus(orderID int, newStatus string, statusEmoji string) bool {
+	order, exists := orders[orderID]
+	if !exists {
+		return false
+	}
+
+	order.Status = newStatus
+
+	for _, adminID := range adminIDs {
+		sendText(
+			adminID,
+			fmt.Sprintf("%s Заказ #%d переведён в статус: %s", statusEmoji, order.ID, order.Status),
+			adminKeyboard(order.ID),
+		)
+	}
+
+	sendStatusToClient(order)
+	return true
+}
+
+func handleAdminStatusCommand(text string, chatID int64) bool {
+	if !isAdmin(chatID) {
+		return false
+	}
+
 	orderMutex.Lock()
 	defer orderMutex.Unlock()
 
 	if orderID, ok := parseAdminCommand(text, "Принять заказ"); ok {
-		order, exists := orders[orderID]
-		if !exists {
+		if updateOrderStatus(orderID, "Принят", "✅") {
 			return true
 		}
-
-		order.Status = "Принят"
-
-		for _, adminID := range adminIDs {
-			sendText(adminID, fmt.Sprintf("✅ Заказ #%d переведён в статус: %s", order.ID, order.Status), adminKeyboard(order.ID))
-		}
-
-		sendStatusToClient(order)
+		sendText(chatID, fmt.Sprintf("Заказ #%d не найден.", orderID), nil)
 		return true
 	}
 
 	if orderID, ok := parseAdminCommand(text, "В доставке"); ok {
-		order, exists := orders[orderID]
-		if !exists {
+		if updateOrderStatus(orderID, "В доставке", "🚚") {
 			return true
 		}
-
-		order.Status = "В доставке"
-
-		for _, adminID := range adminIDs {
-			sendText(adminID, fmt.Sprintf("🚚 Заказ #%d переведён в статус: %s", order.ID, order.Status), adminKeyboard(order.ID))
-		}
-
-		sendStatusToClient(order)
+		sendText(chatID, fmt.Sprintf("Заказ #%d не найден.", orderID), nil)
 		return true
 	}
 
 	if orderID, ok := parseAdminCommand(text, "Доставлен"); ok {
-		order, exists := orders[orderID]
-		if !exists {
+		if updateOrderStatus(orderID, "Доставлен", "📦") {
 			return true
 		}
-
-		order.Status = "Доставлен"
-
-		for _, adminID := range adminIDs {
-			sendText(adminID, fmt.Sprintf("📦 Заказ #%d переведён в статус: %s", order.ID, order.Status), adminKeyboard(order.ID))
-		}
-
-		sendStatusToClient(order)
+		sendText(chatID, fmt.Sprintf("Заказ #%d не найден.", orderID), nil)
 		return true
 	}
 
 	return false
 }
 
+func validateOrderRequest(req *CreateOrderRequest) error {
+	if strings.TrimSpace(req.Customer.Name) == "" {
+		return fmt.Errorf("не указано имя клиента")
+	}
+
+	if strings.TrimSpace(req.Customer.Phone) == "" {
+		return fmt.Errorf("не указан телефон клиента")
+	}
+
+	if strings.TrimSpace(req.Customer.Address) == "" {
+		return fmt.Errorf("не указан адрес клиента")
+	}
+
+	if len(req.Items) == 0 {
+		return fmt.Errorf("корзина пуста")
+	}
+
+	calculatedTotal := 0
+
+	for i, item := range req.Items {
+		if strings.TrimSpace(item.Title) == "" {
+			return fmt.Errorf("у товара #%d не указано название", i+1)
+		}
+		if item.Quantity <= 0 {
+			return fmt.Errorf("у товара %q некорректное количество", item.Title)
+		}
+		if item.Price < 0 {
+			return fmt.Errorf("у товара %q некорректная цена", item.Title)
+		}
+
+		calculatedTotal += item.Quantity * item.Price
+	}
+
+	if req.Total != calculatedTotal {
+		return fmt.Errorf("итоговая сумма не совпадает с товарами")
+	}
+
+	return nil
+}
+
 func orderHandler(w http.ResponseWriter, r *http.Request) {
-	enableCORS(w)
+	enableCORS(w, r)
 
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusOK)
@@ -231,15 +368,26 @@ func orderHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{
+			Error: "method not allowed",
+		})
 		return
 	}
 
-	var req CreateOrderRequest
+	defer r.Body.Close()
 
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		http.Error(w, "invalid json body", http.StatusBadRequest)
+	var req CreateOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: "invalid json body",
+		})
+		return
+	}
+
+	if err := validateOrderRequest(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: err.Error(),
+		})
 		return
 	}
 
@@ -258,16 +406,16 @@ func orderHandler(w http.ResponseWriter, r *http.Request) {
 	orders[orderID] = order
 	orderMutex.Unlock()
 
-	fmt.Println("=== НОВЫЙ ЗАКАЗ ===")
-	fmt.Println("ID:", order.ID)
-	fmt.Println("Имя:", order.Customer.Name)
-	fmt.Println("Телефон:", order.Customer.Phone)
-	fmt.Println("Адрес:", order.Customer.Address)
-	fmt.Println("ChatID клиента:", order.Customer.ChatID)
-	fmt.Println("Товары:")
+	log.Println("=== НОВЫЙ ЗАКАЗ ===")
+	log.Println("ID:", order.ID)
+	log.Println("Имя:", order.Customer.Name)
+	log.Println("Телефон:", order.Customer.Phone)
+	log.Println("Адрес:", order.Customer.Address)
+	log.Println("ChatID клиента:", order.Customer.ChatID)
+	log.Println("Товары:")
 
 	for _, item := range order.Items {
-		fmt.Printf(
+		log.Printf(
 			"- %s | %d шт × %d ₽ = %d ₽\n",
 			item.Title,
 			item.Quantity,
@@ -276,34 +424,25 @@ func orderHandler(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 
-	fmt.Println("Итого:", order.Total)
-	fmt.Println("===================")
+	log.Println("Итого:", order.Total)
+	log.Println("===================")
 
 	sendOrderToAdmins(order)
 
-	w.Header().Set("Content-Type", "application/json")
-
-	resp := CreateOrderResponse{
+	writeJSON(w, http.StatusOK, CreateOrderResponse{
 		Message: "Заказ успешно получен",
 		OrderID: order.ID,
-	}
-
-	err = json.NewEncoder(w).Encode(resp)
-	if err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		return
-	}
+	})
 }
 
 func updatesPoller() {
 	if botApi == nil {
-		fmt.Println("Бот не инициализирован, polling не запущен")
+		log.Println("Бот не инициализирован, polling не запущен")
 		return
 	}
 
 	ctx := context.Background()
-
-	fmt.Println("Long polling MAX запущен...")
+	log.Println("Long polling MAX запущен...")
 
 	for upd := range botApi.GetUpdates(ctx) {
 		msgUpd, ok := upd.(*schemes.MessageCreatedUpdate)
@@ -316,20 +455,32 @@ func updatesPoller() {
 			continue
 		}
 
-		fmt.Println("Входящее сообщение от MAX:", text)
-		handleAdminStatusCommand(text)
+		chatID := msgUpd.Message.Recipient.ChatId
+		log.Printf("ChatID: %d | Сообщение: %s\n", chatID, text)
+
+		if handleAdminStatusCommand(text, chatID) {
+			continue
+		}
+
+		if handled := handleUserCommand(text, chatID); handled {
+			continue
+		}
 	}
 }
 
 func main() {
-	err := godotenv.Load()
-	if err != nil {
-		fmt.Println("⚠️ .env не найден, пробуем переменные системы")
+	if err := godotenv.Load(); err != nil {
+		log.Println("⚠️ .env не найден, пробуем переменные системы")
 	}
 
-	token := os.Getenv("BOT_TOKEN")
+	token := strings.TrimSpace(os.Getenv("BOT_TOKEN"))
 	if token == "" {
 		log.Fatal("BOT_TOKEN не найден в .env")
+	}
+
+	storefrontURL = strings.TrimSpace(os.Getenv("STOREFRONT_URL"))
+	if storefrontURL == "" {
+		log.Fatal("STOREFRONT_URL не найден в .env")
 	}
 
 	api, err := maxbot.New(
@@ -344,8 +495,18 @@ func main() {
 
 	go updatesPoller()
 
-	http.HandleFunc("/api/order", orderHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/order", orderHandler)
 
-	fmt.Println("API сервер запущен на http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	server := &http.Server{
+		Addr:              ":8080",
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       30 * time.Second,
+	}
+
+	log.Println("API сервер запущен на http://localhost:8080")
+	log.Fatal(server.ListenAndServe())
 }
