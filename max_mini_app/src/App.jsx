@@ -263,57 +263,33 @@ function App() {
   );
 
   const renderFloatingCartButton = () => {
-  if (
-    cartTotalQty === 0 ||
-    currentScreen === "cart" ||
-    currentScreen === "checkout"
-  ) {
-    return null;
-  }
+    if (
+      cartTotalQty === 0 ||
+      currentScreen === "cart" ||
+      currentScreen === "checkout" ||
+      currentScreen === "product"
+    ) {
+      return null;
+    }
 
-  return (
-    <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
-      <div className="rounded-[24px] bg-slate-900 p-4 text-white shadow-lg space-y-3">
-
-        <div className="flex items-center justify-between">
-          <div className="text-2xl font-bold">
-            {selectedProduct?.price * quantity || cartTotal} ₽
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={decreaseQty}
-              className="h-10 w-10 rounded-xl bg-white/10 text-xl"
-            >
-              −
-            </button>
-
-            <div className="text-lg font-bold min-w-[40px] text-center">
-              {quantity}
-            </div>
-
-            <button
-              type="button"
-              onClick={increaseQty}
-              className="h-10 w-10 rounded-xl bg-white/10 text-xl"
-            >
-              +
-            </button>
-          </div>
-        </div>
-
+    return (
+      <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
         <button
           type="button"
-          onClick={addToCart}
-          className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
+          onClick={openCart}
+          className="flex w-full items-center justify-between rounded-2xl bg-emerald-500 px-4 py-4 text-white shadow-lg"
         >
-          Добавить в корзину
+          <div className="text-left">
+            <div className="text-xs text-emerald-100">
+              В корзине {cartTotalQty} шт.
+            </div>
+            <div className="text-base font-bold">Перейти к оформлению</div>
+          </div>
+          <div className="text-lg font-bold">{cartTotal} ₽</div>
         </button>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   if (currentScreen === "product" && selectedProduct) {
     return (
@@ -345,7 +321,7 @@ function App() {
           </div>
         </header>
 
-        <main className="px-4 pb-32 pt-4">
+        <main className="px-4 pb-40 pt-4">
           <div className="overflow-hidden rounded-[28px] bg-white shadow-sm">
             <div className="aspect-square bg-slate-100">
               <img
@@ -402,15 +378,12 @@ function App() {
                   </button>
                 </div>
               </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-              </div>
             </div>
           </div>
         </main>
 
         <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
-          <div className="rounded-[24px] bg-slate-900 p-4 text-white shadow-lg">
+          <div className="rounded-[24px] bg-slate-900 p-4 text-white shadow-lg space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm text-slate-300">Сумма</div>
@@ -418,15 +391,34 @@ function App() {
                   {selectedProduct.price * quantity} ₽
                 </div>
               </div>
-              <div className="rounded-2xl bg-white/10 px-3 py-2 text-sm font-semibold">
-                {quantity} шт
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={decreaseQty}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-xl"
+                >
+                  −
+                </button>
+
+                <div className="min-w-[40px] text-center text-lg font-bold">
+                  {quantity}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={increaseQty}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-xl"
+                >
+                  +
+                </button>
               </div>
             </div>
 
             <button
               type="button"
               onClick={addToCart}
-              className="mt-4 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
+              className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
             >
               Добавить в корзину
             </button>
