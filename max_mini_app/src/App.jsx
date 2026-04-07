@@ -18,6 +18,17 @@ const categoryMeta = {
   },
 };
 
+function Screen({ children, bottomNav }) {
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-900">
+      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[#f8fafc] shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
+        {children}
+        {bottomNav}
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const categories = ["Свинина", "Говядина", "Вторые блюда"];
 
@@ -219,15 +230,6 @@ function App() {
     }
   };
 
-  const Screen = ({ children, nav = "Главная" }) => (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <div className="mx-auto min-h-screen w-full max-w-[430px] bg-[#f8fafc] shadow-[0_10px_40px_rgba(15,23,42,0.08)]">
-        {children}
-        {renderBottomNav(nav)}
-      </div>
-    </div>
-  );
-
   const renderBottomNav = (activeTab = "Главная") => (
     <nav className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-[430px] -translate-x-1/2 border-t border-slate-200 bg-white px-2 py-3">
       {[
@@ -237,6 +239,7 @@ function App() {
       ].map(([label, icon]) => (
         <button
           key={label}
+          type="button"
           onClick={() => {
             if (label === "Главная") goHome();
             if (label === "Корзина") openCart();
@@ -260,18 +263,25 @@ function App() {
   );
 
   const renderFloatingCartButton = () => {
-    if (cartTotalQty === 0 || currentScreen === "cart" || currentScreen === "checkout") {
+    if (
+      cartTotalQty === 0 ||
+      currentScreen === "cart" ||
+      currentScreen === "checkout"
+    ) {
       return null;
     }
 
     return (
       <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
         <button
+          type="button"
           onClick={openCart}
           className="flex w-full items-center justify-between rounded-2xl bg-emerald-500 px-4 py-4 text-white shadow-lg"
         >
           <div className="text-left">
-            <div className="text-xs text-emerald-100">В корзине {cartTotalQty} шт.</div>
+            <div className="text-xs text-emerald-100">
+              В корзине {cartTotalQty} шт.
+            </div>
             <div className="text-base font-bold">Перейти к оформлению</div>
           </div>
           <div className="text-lg font-bold">{cartTotal} ₽</div>
@@ -282,10 +292,11 @@ function App() {
 
   if (currentScreen === "product" && selectedProduct) {
     return (
-      <Screen nav="Корзина">
+      <Screen bottomNav={renderBottomNav("Корзина")}>
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex items-center gap-3 px-4 py-4">
             <button
+              type="button"
               onClick={closeProductCard}
               className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg"
             >
@@ -300,6 +311,7 @@ function App() {
             </div>
 
             <button
+              type="button"
               onClick={openCart}
               className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold"
             >
@@ -345,6 +357,7 @@ function App() {
 
                 <div className="flex items-center gap-3">
                   <button
+                    type="button"
                     onClick={decreaseQty}
                     className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl"
                   >
@@ -356,6 +369,7 @@ function App() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={increaseQty}
                     className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-2xl"
                   >
@@ -366,12 +380,14 @@ function App() {
 
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <button
+                  type="button"
                   onClick={() => setQuantity(10)}
                   className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
                 >
                   10 шт
                 </button>
                 <button
+                  type="button"
                   onClick={() => setQuantity(36)}
                   className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
                 >
@@ -397,6 +413,7 @@ function App() {
             </div>
 
             <button
+              type="button"
               onClick={addToCart}
               className="mt-4 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
             >
@@ -410,10 +427,11 @@ function App() {
 
   if (currentScreen === "checkout") {
     return (
-      <Screen nav="Оформить">
+      <Screen bottomNav={renderBottomNav("Оформить")}>
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex items-center gap-3 px-4 py-4">
             <button
+              type="button"
               onClick={openCart}
               className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg"
             >
@@ -421,7 +439,9 @@ function App() {
             </button>
 
             <div className="min-w-0 flex-1">
-              <div className="text-xs font-medium text-slate-400">Оформление</div>
+              <div className="text-xs font-medium text-slate-400">
+                Оформление
+              </div>
               <div className="truncate text-base font-bold text-slate-900">
                 Провиант Одинцово
               </div>
@@ -447,6 +467,8 @@ function App() {
                   Имя
                 </label>
                 <input
+                  type="text"
+                  autoComplete="name"
                   value={form.name}
                   onChange={(e) => handleInputChange("name", e.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-emerald-500 focus:bg-white"
@@ -459,6 +481,9 @@ function App() {
                   Телефон
                 </label>
                 <input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
                   value={form.phone}
                   onChange={(e) => handleInputChange("phone", e.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-emerald-500 focus:bg-white"
@@ -471,6 +496,8 @@ function App() {
                   Адрес
                 </label>
                 <input
+                  type="text"
+                  autoComplete="street-address"
                   value={form.address}
                   onChange={(e) => handleInputChange("address", e.target.value)}
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-emerald-500 focus:bg-white"
@@ -519,6 +546,7 @@ function App() {
           </section>
 
           <button
+            type="button"
             onClick={submitOrder}
             disabled={loading}
             className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white disabled:opacity-60"
@@ -532,10 +560,11 @@ function App() {
 
   if (currentScreen === "cart") {
     return (
-      <Screen nav="Корзина">
+      <Screen bottomNav={renderBottomNav("Корзина")}>
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
           <div className="flex items-center gap-3 px-4 py-4">
             <button
+              type="button"
               onClick={goHome}
               className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-lg"
             >
@@ -551,6 +580,7 @@ function App() {
 
             {cartItems.length > 0 && (
               <button
+                type="button"
                 onClick={clearCart}
                 className="rounded-2xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-600"
               >
@@ -574,6 +604,7 @@ function App() {
               </p>
 
               <button
+                type="button"
                 onClick={goHome}
                 className="mt-5 rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
               >
@@ -608,7 +639,10 @@ function App() {
                       <div className="mt-3 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => updateCartItemQty(item.product.id, -1)}
+                            type="button"
+                            onClick={() =>
+                              updateCartItemQty(item.product.id, -1)
+                            }
                             className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold"
                           >
                             −
@@ -617,7 +651,10 @@ function App() {
                             {item.quantity}
                           </div>
                           <button
-                            onClick={() => updateCartItemQty(item.product.id, 1)}
+                            type="button"
+                            onClick={() =>
+                              updateCartItemQty(item.product.id, 1)
+                            }
                             className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold"
                           >
                             +
@@ -632,6 +669,7 @@ function App() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={() => removeCartItem(item.product.id)}
                     className="mt-3 w-full rounded-2xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600"
                   >
@@ -652,6 +690,7 @@ function App() {
                 </div>
 
                 <button
+                  type="button"
                   onClick={openCheckout}
                   className="mt-5 w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
                 >
@@ -666,137 +705,142 @@ function App() {
   }
 
   return (
-  <Screen nav="Главная">
-    {/* HEADER */}
-    <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
-      <div className="flex items-center gap-3 px-4 py-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl">
-          🥫
-        </div>
-
-        <div className="flex-1">
-          <div className="text-xs text-slate-400">Доставка продуктов</div>
-          <div className="text-lg font-bold text-slate-900">
-            Провиант Одинцово
+    <Screen bottomNav={renderBottomNav("Главная")}>
+      <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
+        <div className="flex items-center gap-3 px-4 py-4">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl">
+            🥫
           </div>
-        </div>
 
-        <button
-          onClick={openCart}
-          className="relative rounded-2xl bg-slate-900 px-3 py-2 text-white"
-        >
-          🛒
-          {cartTotalQty > 0 && (
-            <span className="absolute -top-2 -right-2 rounded-full bg-emerald-500 px-2 text-xs text-white">
-              {cartTotalQty}
+          <div className="flex-1">
+            <div className="text-xs text-slate-400">Доставка продуктов</div>
+            <div className="text-lg font-bold text-slate-900">
+              Провиант Одинцово
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={openCart}
+            className="relative rounded-2xl bg-slate-900 px-3 py-2 text-white"
+          >
+            🛒
+            {cartTotalQty > 0 && (
+              <span className="absolute -right-2 -top-2 rounded-full bg-emerald-500 px-2 text-xs text-white">
+                {cartTotalQty}
+              </span>
+            )}
+          </button>
+        </div>
+      </header>
+
+      <main className="space-y-6 px-4 pb-32 pt-4">
+        <section className="rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-lg">
+          <h1 className="text-2xl font-bold">Натуральные консервы</h1>
+          <p className="mt-2 text-sm text-emerald-100">
+            Без добавок. ГОСТ. Доставка за 1 день.
+          </p>
+
+          <button
+            type="button"
+            onClick={() => setSelectedCategory("Говядина")}
+            className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-bold text-emerald-700"
+          >
+            Смотреть каталог
+          </button>
+        </section>
+
+        <section>
+          <h2 className="mb-3 text-lg font-bold text-slate-900">Категории</h2>
+
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {categories.map((category) => {
+              const isActive = selectedCategory === category;
+              const meta = categoryMeta[category];
+
+              return (
+                <button
+                  key={category}
+                  type="button"
+                  onClick={() => setSelectedCategory(category)}
+                  className={`min-w-[170px] rounded-2xl p-3 text-left transition ${
+                    isActive
+                      ? "bg-emerald-500 text-white"
+                      : "border border-slate-200 bg-white"
+                  }`}
+                >
+                  <div className="text-lg font-semibold">
+                    {meta?.emoji} {category}
+                  </div>
+                  <div
+                    className={`mt-1 text-xs ${
+                      isActive ? "text-emerald-50" : "text-slate-500"
+                    }`}
+                  >
+                    {meta?.subtitle}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-slate-900">
+              {selectedCategory}
+            </h2>
+            <span className="text-sm text-slate-400">
+              {filteredProducts.length} шт.
             </span>
-          )}
-        </button>
-      </div>
-    </header>
+          </div>
 
-    {/* CONTENT */}
-    <main className="px-4 pb-32 pt-4 space-y-6">
-
-      {/* HERO */}
-      <section className="rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-lg">
-        <h1 className="text-2xl font-bold">
-          Натуральные консервы
-        </h1>
-        <p className="mt-2 text-sm text-emerald-100">
-          Без добавок. ГОСТ. Доставка за 1 день.
-        </p>
-
-        <button
-          onClick={() => setSelectedCategory("Говядина")}
-          className="mt-4 rounded-xl bg-white px-4 py-2 text-sm font-bold text-emerald-700"
-        >
-          Смотреть каталог
-        </button>
-      </section>
-
-      {/* CATEGORIES */}
-      <section>
-        <h2 className="mb-3 text-lg font-bold text-slate-900">
-          Категории
-        </h2>
-
-        <div className="flex gap-3 overflow-x-auto pb-2">
-          {categories.map((category) => {
-            const isActive = selectedCategory === category;
-
-            return (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`min-w-[140px] rounded-2xl p-3 text-left transition ${
-                  isActive
-                    ? "bg-emerald-500 text-white"
-                    : "bg-white border border-slate-200"
-                }`}
+          <div className="grid grid-cols-2 gap-4">
+            {filteredProducts.map((product) => (
+              <div
+                key={product.id}
+                onClick={() => openProductCard(product)}
+                className="cursor-pointer rounded-2xl bg-white shadow-sm transition hover:shadow-md"
               >
-                <div className="text-lg font-semibold">{category}</div>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* PRODUCTS */}
-      <section>
-        <div className="mb-3 flex justify-between items-center">
-          <h2 className="text-lg font-bold text-slate-900">
-            {selectedCategory}
-          </h2>
-          <span className="text-sm text-slate-400">
-            {filteredProducts.length} шт.
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          {filteredProducts.map((product) => (
-            <div
-              key={product.id}
-              onClick={() => openProductCard(product)}
-              className="cursor-pointer rounded-2xl bg-white shadow-sm hover:shadow-md transition"
-            >
-              <div className="aspect-square bg-slate-100 rounded-t-2xl overflow-hidden">
-                <img
-                  src={product.image}
-                  className="h-full w-full object-cover"
-                />
-              </div>
-
-              <div className="p-3">
-                <div className="text-sm font-semibold text-slate-900 line-clamp-2">
-                  {product.title}
+                <div className="aspect-square overflow-hidden rounded-t-2xl bg-slate-100">
+                  <img
+                    src={product.image}
+                    alt={product.title}
+                    className="h-full w-full object-cover"
+                  />
                 </div>
 
-                <div className="mt-2 flex justify-between items-center">
-                  <div className="font-bold text-slate-900">
-                    {product.price} ₽
+                <div className="p-3">
+                  <div className="line-clamp-2 text-sm font-semibold text-slate-900">
+                    {product.title}
                   </div>
 
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openProductCard(product);
-                    }}
-                    className="rounded-lg bg-emerald-500 px-2 py-1 text-white"
-                  >
-                    +
-                  </button>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="font-bold text-slate-900">
+                      {product.price} ₽
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openProductCard(product);
+                      }}
+                      className="rounded-lg bg-emerald-500 px-2 py-1 text-white"
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </section>
-    </main>
+            ))}
+          </div>
+        </section>
+      </main>
 
-    {renderFloatingCartButton()}
-  </Screen>
-);
+      {renderFloatingCartButton()}
+    </Screen>
+  );
 }
 
 export default App;
