@@ -263,32 +263,57 @@ function App() {
   );
 
   const renderFloatingCartButton = () => {
-    if (
-      cartTotalQty === 0 ||
-      currentScreen === "cart" ||
-      currentScreen === "checkout"
-    ) {
-      return null;
-    }
+  if (
+    cartTotalQty === 0 ||
+    currentScreen === "cart" ||
+    currentScreen === "checkout"
+  ) {
+    return null;
+  }
 
-    return (
-      <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
+  return (
+    <div className="fixed bottom-20 left-1/2 z-30 w-full max-w-[430px] -translate-x-1/2 px-4">
+      <div className="rounded-[24px] bg-slate-900 p-4 text-white shadow-lg space-y-3">
+
+        <div className="flex items-center justify-between">
+          <div className="text-2xl font-bold">
+            {selectedProduct?.price * quantity || cartTotal} ₽
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={decreaseQty}
+              className="h-10 w-10 rounded-xl bg-white/10 text-xl"
+            >
+              −
+            </button>
+
+            <div className="text-lg font-bold min-w-[40px] text-center">
+              {quantity}
+            </div>
+
+            <button
+              type="button"
+              onClick={increaseQty}
+              className="h-10 w-10 rounded-xl bg-white/10 text-xl"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
         <button
           type="button"
-          onClick={openCart}
-          className="flex w-full items-center justify-between rounded-2xl bg-emerald-500 px-4 py-4 text-white shadow-lg"
+          onClick={addToCart}
+          className="w-full rounded-2xl bg-emerald-500 px-4 py-4 text-base font-bold text-white"
         >
-          <div className="text-left">
-            <div className="text-xs text-emerald-100">
-              В корзине {cartTotalQty} шт.
-            </div>
-            <div className="text-base font-bold">Перейти к оформлению</div>
-          </div>
-          <div className="text-lg font-bold">{cartTotal} ₽</div>
+          Добавить в корзину
         </button>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   if (currentScreen === "product" && selectedProduct) {
     return (
@@ -379,20 +404,6 @@ function App() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setQuantity(10)}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
-                >
-                  10 шт
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuantity(36)}
-                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
-                >
-                  36 шт
-                </button>
               </div>
             </div>
           </div>
