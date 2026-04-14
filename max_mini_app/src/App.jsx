@@ -761,8 +761,12 @@ function App() {
     <Screen bottomNav={renderBottomNav("Главная")}>
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-3 px-4 py-4">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 text-xl">
-            🌿
+          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl bg-white">
+            <img
+            src="/images/logo.png"
+            alt="Логотип"
+            className="h-full w-full object-cover"
+            />
           </div>
 
           <div className="flex-1">
@@ -791,9 +795,13 @@ function App() {
         <section className="rounded-3xl bg-gradient-to-br from-emerald-500 to-emerald-700 p-5 text-white shadow-lg">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/15 text-3xl shadow">
-                🌿
-              </div>
+              <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-white/20 shadow">
+              <img
+              src="/images/logo.png"
+              alt="Логотип"
+             className="h-full w-full object-cover"
+              />
+            </div>
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-emerald-100">
                   Натуральные продукты
