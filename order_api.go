@@ -23,7 +23,7 @@ var adminIDs = []int64{
 }
 
 var (
-	botApi       *maxbot.Api
+	botApi        *maxbot.Api
 	storefrontURL string
 )
 
@@ -83,9 +83,10 @@ func enableCORS(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 
 	allowedOrigins := map[string]bool{
-		"https://dimensional-textile-greatest-von.trycloudflare.com": true,
-		"http://localhost:5173":                                true,
-		"https://max-shop-p1lm6mt33-jonexfs-projects.vercel.app": true,
+		"https://dimensional-textile-greatest-von.trycloudflare.com":  true,
+		"http://localhost:5173":                                        true,
+		"http://localhost:5174":                                        true,
+		"https://max-shop-p1lm6mt33-jonexfs-projects.vercel.app":       true,
 	}
 
 	if allowedOrigins[origin] {
@@ -105,10 +106,9 @@ func writeJSON(w http.ResponseWriter, statusCode int, payload any) {
 	}
 }
 
-func mainKeyboard() *maxbot.Keyboard {
+func storefrontKeyboard() *maxbot.Keyboard {
 	kb := &maxbot.Keyboard{}
 	kb.AddRow().AddMessage("Витрина")
-	kb.AddRow().AddMessage("Каталог").AddMessage("Корзина")
 	return kb
 }
 
@@ -148,33 +148,16 @@ func sendText(chatID int64, text string, kb *maxbot.Keyboard) {
 }
 
 func sendWelcome(chatID int64) {
-	text := fmt.Sprintf(
-		"👋 Добро пожаловать в Провиант Одинцово!\n\n"+
-			"Открыть витрину:\n%s\n\n"+
-			"Также можно написать:\n"+
-			"• Витрина\n"+
-			"• Каталог\n"+
-			"• Корзина\n"+
-			"• /id",
-		storefrontURL,
-	)
+	text := "🥫 Провиант Одинцово\n\n" +
+		"Натуральные мясные консервы по ГОСТ.\n" +
+		"Откройте витрину и оформите заказ за пару минут 👇"
 
-	sendText(chatID, text, mainKeyboard())
+	sendText(chatID, text, storefrontKeyboard())
 }
 
 func sendStorefront(chatID int64) {
-	text := fmt.Sprintf("🛒 Витрина магазина:\n%s", storefrontURL)
-	sendText(chatID, text, mainKeyboard())
-}
-
-func sendCatalogHint(chatID int64) {
-	text := fmt.Sprintf("📦 Каталог доступен в витрине магазина:\n%s", storefrontURL)
-	sendText(chatID, text, mainKeyboard())
-}
-
-func sendCartHint(chatID int64) {
-	text := fmt.Sprintf("🛒 Корзина доступна внутри витрины магазина:\n%s", storefrontURL)
-	sendText(chatID, text, mainKeyboard())
+	text := "🛍 Открыть витрину:\nhttps://max.ru/id667008231293_bot?startapp"
+	sendText(chatID, text, storefrontKeyboard())
 }
 
 func handleUserCommand(text string, chatID int64) bool {
@@ -183,20 +166,8 @@ func handleUserCommand(text string, chatID int64) bool {
 		sendWelcome(chatID)
 		return true
 
-	case "/id", "id", "ID":
-		sendText(chatID, fmt.Sprintf("Ваш ChatID: %d", chatID), mainKeyboard())
-		return true
-
 	case "Витрина":
 		sendStorefront(chatID)
-		return true
-
-	case "Каталог":
-		sendCatalogHint(chatID)
-		return true
-
-	case "Корзина":
-		sendCartHint(chatID)
 		return true
 
 	default:
